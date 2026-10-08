@@ -466,12 +466,32 @@
 </div>
 
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 (function(){
   "use strict";
 
+  var firebaseConfig = {
+    apiKey: "AIzaSyD6oyYSp384vK-Cto_yPN1eI4Y5fNH520s",
+    authDomain: "tachiai-houkoku.firebaseapp.com",
+    projectId: "tachiai-houkoku",
+    storageBucket: "tachiai-houkoku.firebasestorage.app",
+    messagingSenderId: "233355714085",
+    appId: "1:233355714085:web:f877a395c75a3d7f6129cc",
+    measurementId: "G-Q4Q3S5BEP8"
+  };
+  var db = null;
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+  } catch(e){
+    console.error("Firebase init failed", e);
+  }
+  var MASTERS_DOC = null;
+  if(db) MASTERS_DOC = db.collection("config").doc("masters");
+
   var MAX_PHOTOS = 20;
-  var STORAGE_KEY = "constructionReportMasters";
   var locIdSeq = 1;
   var photoIdSeq = 1;
 
@@ -493,27 +513,32 @@
   }
   state.locations.push(newLocation());
 
-  function hasStorage(){
-    return typeof window.storage !== "undefined" && window.storage;
-  }
-
   function loadMasters(){
-    if(!hasStorage()) return Promise.resolve();
-    return window.storage.get(STORAGE_KEY, false).then(function(res){
-      if(res && res.value){
-        var parsed = JSON.parse(res.value);
+    if(!MASTERS_DOC) return Promise.resolve();
+    return MASTERS_DOC.get().then(function(docSnap){
+      if(docSnap.exists){
+        var data = docSnap.data() || {};
         state.masters = {
-          contents: Array.isArray(parsed.contents) ? parsed.contents : DEFAULT_MASTERS.contents.slice(),
-          staff: Array.isArray(parsed.staff) ? parsed.staff : DEFAULT_MASTERS.staff.slice()
+          contents: Array.isArray(data.contents) ? data.contents : DEFAULT_MASTERS.contents.slice(),
+          staff: Array.isArray(data.staff) ? data.staff : DEFAULT_MASTERS.staff.slice()
         };
+      } else {
+        // first run for this project - seed Firestore with the current defaults
+        return MASTERS_DOC.set(state.masters).catch(function(e){
+          console.error("masters seed failed", e);
+        });
       }
-    }).catch(function(){ /* not found yet - keep defaults */ });
+    }).catch(function(e){
+      console.error("masters load failed", e);
+      // offline or unreachable - keep the in-memory defaults for this session
+    });
   }
 
   function saveMasters(){
-    if(!hasStorage()) return;
-    window.storage.set(STORAGE_KEY, JSON.stringify(state.masters), false).catch(function(e){
-      console.error("master save failed", e);
+    if(!MASTERS_DOC) return;
+    MASTERS_DOC.set(state.masters).catch(function(e){
+      console.error("masters save failed", e);
+      alert("マスタの保存に失敗しました。通信環境をご確認のうえ、もう一度お試しください。");
     });
   }
 
